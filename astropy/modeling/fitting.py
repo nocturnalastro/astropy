@@ -1154,7 +1154,7 @@ def _convert_input(x, y, z=None, n_models=1, model_set_axis=0):
     return farg
 
 
-class MinimizeFitter(Fitter):
+class MinimizeLSQFitter(Fitter):
     """
 
     A fitter for the minimize optimizer.
@@ -1162,16 +1162,27 @@ class MinimizeFitter(Fitter):
     Parameters
     ----------
     method : str or callable(custom)
-        select minimization method
+        Selects minimization method, available methods include:
+            nelder-mead, newton-cg, tnc, cobyla, powell, bfgs, slsqp, cg,
+            trust-ncg, trust-constr, trust-exact, trust-krylov, l-bfgs-b,
+            dogleg
 
     supported_constraints : list
-        lists the constraint types supported by the Optimization method default is fixed
-        and tied parameters, these can be set for custom methods for predifined methods
+        lists the constraint types supported by the
+        Optimization method default is fixed
+        and tied parameters, these can be set
+        for custom methods for predifined methods
         this will be changed atomatically
     """
 
     def __init__(self, method='slsqp', supported_constraints=None):
-        super(MinimizeFitter, self).__init__(optimizer=Minimize, statistic=leastsquare, method=method, supported_constraints=supported_constraints)
+        init_values = {
+            'optimizer': Minimize,
+            'statistic': leastsquare,
+            'method': method,
+            'supported_constraints': supported_constraints,
+        }
+        super(MinimizeLSQFitter, self).__init__(**init_values)
 
     def __call__(self, model, x, y, z=None, weights=None, **kwargs):
         """
@@ -1190,21 +1201,24 @@ class MinimizeFitter(Fitter):
         weights : array (optional)
             weights
         kwargs : dict
-            optional keyword arguments to be passed to the optimizer or the statistic
+            optional keyword arguments to be passed to the optimizer or
+            the statistic
 
         Returns
         -------
         model_copy : `~astropy.modeling.FittableModel`
             a copy of the input model with parameters set by the fitter
         """
-        model_copy = _validate_model(model, self._opt_method.supported_constraints)
+        model_copy = _validate_model(
+            model, self._opt_method.supported_constraints)
 
         farg = _convert_input(x, y, z)
         farg = (model_copy, weights, ) + farg
 
         p0, _ = _model_to_fit_params(model_copy)
 
-        fitparams, self.fit_info = self._opt_method(self.objective_function, p0, farg, **kwargs)
+        fitparams, self.fit_info = self._opt_method(self.objective_function,
+                                                    p0, farg, **kwargs)
         self.scipy_opt_result = self._opt_method.scipy_opt_result
         _fitter_to_model_params(model_copy, fitparams)
         return model_copy

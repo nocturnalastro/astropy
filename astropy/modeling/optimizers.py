@@ -226,9 +226,10 @@ class Simplex(Optimization):
         # Get the verbosity level
         disp = kwargs.pop('verblevel', None)
 
-        fitparams, final_func_val, numiter, funcalls, exit_mode = self.opt_method(
-            objfunc, initval, args=fargs, xtol=self._acc, disp=disp,
-            full_output=True, **kwargs)
+        fitparams, final_func_val, numiter, funcalls, \
+            exit_mode = self.opt_method(
+                objfunc, initval, args=fargs, xtol=self._acc, disp=disp,
+                full_output=True, **kwargs)
         self.fit_info['final_func_val'] = final_func_val
         self.fit_info['numiter'] = numiter
         self.fit_info['exit_mode'] = exit_mode
@@ -252,13 +253,16 @@ class Minimize(Optimization):
     Parameters
     ----------
     method : str or callable(custom)
-        Selects minimization method.
+        Selects minimization method, available methods include:
+            nelder-mead, newton-cg, tnc, cobyla, powell, bfgs, slsqp, cg,
+            trust-ncg, trust-constr, trust-exact, trust-krylov, l-bfgs-b,
+            dogleg
 
     supported_constraints : list
-        The constraint types supported by the Optimization method. By default fixed and tied parameters are supported but
-        these can be set for custom methods. For defined methods this will be changed automatically.
-
-
+        The constraint types supported by the Optimization method.
+        By default fixed and tied parameters are supported but
+        these can be set for custom methods.
+        For defined methods this will be changed automatically.
     """
 
     jac_required = False
@@ -269,23 +273,28 @@ class Minimize(Optimization):
         method = method.lower()
         if callable(method):
             if supported_constraints is None:
-                warnings.warn("No supported_constraints set, by default the optimizer will only support fixed and tied parameters."
-                              "If you wish this optimizer to support more then you change this", AstropyUserWarning)
+                warnings.warn(
+                    "No supported_constraints provided, set to fixed and tied",
+                    AstropyUserWarning)
 
                 self.supported_constraints = ['fixed', 'tied']
             else:
                 self.supported_constraints = supported_constraints
         else:
-            if method in ['nelder-mead', 'powell', 'cg', 'bfgs', 'newton-cg', 'dogleg', 'trust-ncg']:
+            if method in ['nelder-mead', 'powell', 'cg', 'bfgs', 'newton-cg',
+                          'dogleg', 'trust-ncg', 'trust-constr', 'trust-exact',
+                          'trust-krylov']:
                 self.supported_constraints = ['fixed', 'tied']
             elif method in ['l-bfgs-b', 'tnc']:
                 self.supported_constraints = ['fixed', 'tied', 'bounds']
             elif method == 'cobyla':
                 self.supported_constraints = ['fixed', 'tied', 'ineqcons']
             elif method in ['slsqp']:
-                self.supported_constraints = ['fixed', 'tied', 'eqcons', 'ineqcons', 'bounds']
+                self.supported_constraints = ['fixed', 'tied', 'eqcons',
+                                              'ineqcons', 'bounds']
 
-            if ['newton-cg', 'trust-ncg']:
+            if method in ['newton-cg', 'trust-ncg','trust-constr',
+                          'trust-exact', 'trust-krylov']:
                 self.jac_required = True
 
         self._method = method
@@ -329,7 +338,8 @@ class Minimize(Optimization):
         pars = [getattr(model, name) for name in model.param_names]
 
         if 'bounds' in self.supported_constraints:
-            bounds = [par.bounds for par in pars if (par.fixed is not True and par.tied is False)]
+            bounds = [par.bounds for par in pars
+                      if (par.fixed is not True and par.tied is False)]
             bounds = np.asarray(bounds)
             for i in bounds:
                 if i[0] is None:
@@ -337,30 +347,37 @@ class Minimize(Optimization):
                 if i[1] is None:
                     i[1] = DEFAULT_BOUNDS[1]
                 # older versions of scipy require this array to be float
-                kwargs['bounds'] = np.asarray(bounds, dtype=np.float)
+            kwargs['bounds'] = np.asarray(bounds, dtype=np.float)
 
-        if 'eqcons' in self.supported_constraints and np.array(model.eqcons)>0:
+        if 'eqcons' in self.supported_constraints and \
+            np.array(model.eqcons) > 0:
+
             if not 'constraints' in kwargs:
                 kwargs['constraints']=[]
+
             for eq in model.eqcons:
                 kwargs['constraints'].append({"type":"eq","fun":eq })
 
-        if 'ineqcons' in self.supported_constraints and np.array(model.ineqcons)>0:
+        if 'ineqcons' in self.supported_constraints and \
+           np.array(model.ineqcons) > 0:
             if not 'constraints' in kwargs:
                 kwargs['constraints']=[]
             for ineq in model.ineqcons:
-                kwargs['constraints'].append({"type":"ineq","fun":ineq })
+                kwargs['constraints'].append({"type":"ineq", "fun":ineq})
 
-        res = self.opt_method(objfunc, initval, method=self._method, args=fargs, tol=self._acc, **kwargs)
+        res = self.opt_method(objfunc, initval, method=self._method,
+                              args=fargs, tol=self._acc, **kwargs)
+
         self.scipy_opt_result = res
 
-        if res['status'] == 1:
-            warnings.warn("The fit may be unsuccessful; "
-                          "Maximum number of function evaluations reached.",
-                          AstropyUserWarning)
-        if res['status'] == 2:
-            warnings.warn("The fit may be unsuccessful; "
-                          "Maximum number of iterations reached.",
-                          AstropyUserWarning)
-        return res['x'], {info_name: res[res_name] for info_name, res_name in zip(['final_func_val', 'numiter', 'num_function_calls', 'exit_mode'],
-                                                                                  ['fun', 'nit', 'nfev', 'status']) if res_name in res}
+        if not res['success']:
+            warnings.warn(
+                "The fit may be unsuccessful; {0}".format(res['message']),
+                AstropyUserWarning)
+
+        _info_value = zip(
+            ['final_func_val', 'numiter', 'num_function_calls','exit_mode'],
+            ['fun', 'nit', 'nfev', 'status'])
+        return res['x'], {info_name: res[res_name]
+                          for info_name, res_name in _info_value
+                          if res_name in res}

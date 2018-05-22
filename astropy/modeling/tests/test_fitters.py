@@ -40,6 +40,9 @@ except ImportError:
 
 fitters = [SimplexLSQFitter, SLSQPLSQFitter, MinimizeFitter]
 
+MINIMZE_FITTER_METHODS = ['Nelder-Mead', 'Powell', 'CG', 'BFGS',
+                          'L-BFGS-B', 'TNC', 'SLSQP']
+
 _RANDOM_SEED = 0x1337
 
 
@@ -501,20 +504,27 @@ class TestNonLinearFitters:
         assert_allclose(fmod.parameters, beta.A.ravel())
         assert_allclose(olscov, fitter.fit_info['param_cov'])
 
-    def test_minimize(self):
+    @pytest.mark.parametrize('method',  MINIMZE_FITTER_METHODS)
+    def test_minimize(self, method):
         """
         Runs MinimizeFitter with most methods.
         """
         # get rid of tiny bound so the method which don't support
         # bounds can be tested
         self.gauss.bounds['stddev'] = (None, None)
-        for meth in ['Nelder-Mead', 'Powell', 'CG', 'BFGS', 'L-BFGS-B', 'TNC', 'SLSQP']:
-            mm = MinimizeFitter(meth)
-            res=mm(self.gauss, self.xdata, self.ydata)
-            # becuase bound removed stddev could go neg
-            res.parameters[-1] = abs(res.parameters[-1])
-            assert_allclose(res.parameters, self.initial_values, rtol=0.1)
 
+        # perturb model
+        self.gauss.amplitude = 80
+        self.gauss.mean = 7
+        self.gauss.stddev = 1.5
+
+        # Fit
+        fitter = MinimizeFitter(method)
+        res = fitter(self.gauss, self.xdata, self.ydata)
+
+        # becuase bound removed stddev could go neg
+        res.parameters[2] = abs(res.parameters[2])
+        assert_allclose(res.parameters, self.initial_values, rtol=0.1)
 
 
 @pytest.mark.skipif('not HAS_PKG')
